@@ -5,6 +5,7 @@ defmodule DurableStash.MixProject do
     [
       app: :durable_stash,
       version: "0.1.0",
+      description: "Durable session-scoped state for LiveView",
       elixir: "~> 1.19",
       start_permanent: Mix.env() == :prod,
       elixirc_paths: elixirc_paths(Mix.env()),
