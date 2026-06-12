@@ -60,10 +60,29 @@ defmodule DurableStash do
            end
          end
 
+  ## Scopes
+
+  Not all state wants the same recovery policy. Each stored key declares a
+  scope:
+
+      use LiveStash, adapter: DurableStash,
+        stored_keys: [
+          theme: :session,    # recover on every mount (the default)
+          draft: :reconnect   # recover only on reconnects; cleared on fresh mounts
+        ]
+
+    * `:session` — recovered on every mount: live navigation, reconnects,
+      crashes, redeploys. Right for settings the user expects to stick.
+    * `:reconnect` — recovered only when the client *rejoins* an existing
+      view (`_mounts > 0`): Wi-Fi drops, LiveView crashes, and redeploys —
+      the browser stays on the page through all of these. A fresh navigation
+      to the view clears the stored values, so starting a "new thing" starts
+      blank. Right for in-progress form drafts.
+
   ## Options (via `use LiveStash, adapter: DurableStash, ...`)
 
     * `:stored_keys` (required) — assigns to persist. Bare atoms mean
-      `:session` scope; `[theme: :session]` is equivalent. `:permanent` is
+      `:session` scope; see *Scopes* above for `:reconnect`. `:permanent` is
       reserved and raises for now.
     * `:vsn` (default `1`) — version of this view's stored shape. On
       recovery, a stored slice with a different vsn is discarded to defaults
@@ -105,7 +124,8 @@ defmodule DurableStash do
               stored_keys: [],
               vsn: 1,
               migrate: nil,
-              fingerprints: %{}
+              fingerprints: %{},
+              reconnected?: false
   end
 
   @private_key :durable_stash
@@ -136,8 +156,11 @@ defmodule DurableStash do
       view: view_name(socket),
       stored_keys: stored_keys,
       vsn: vsn,
-      migrate: migrate
+      migrate: migrate,
+      reconnected?: reconnected?(socket)
     }
+
+    clear_stale_reconnect_keys(socket, context)
 
     LiveView.put_private(socket, @private_key, context)
   end
@@ -224,8 +247,8 @@ defmodule DurableStash do
   end
 
   defp changed_entries(assigns, %Context{} = context) do
-    context
-    |> session_keys()
+    context.stored_keys
+    |> Enum.map(fn {key, _scope} -> key end)
     |> Enum.reduce({%{}, context.fingerprints}, fn key, {changes, fingerprints} ->
       with {:ok, value} <- Map.fetch(assigns, key),
            {:ok, encoded} <- encode_value(key, value) do
@@ -313,7 +336,7 @@ defmodule DurableStash do
   # end up as a mix of old- and new-shape keys.
   defp write_back_migrated(socket, migrated) do
     context = socket.private[@private_key]
-    restored = Map.take(migrated, Enum.map(session_keys(context), &Atom.to_string/1))
+    restored = Map.take(migrated, Enum.map(recoverable_keys(context), &Atom.to_string/1))
 
     case call_session(context, &Session.merge(&1, context.view, restored, context.vsn)) do
       :ok ->
@@ -331,7 +354,7 @@ defmodule DurableStash do
   defp apply_recovered(socket, %Context{} = context, data) do
     {recovered, fingerprints} =
       context
-      |> session_keys()
+      |> recoverable_keys()
       |> Enum.reduce({%{}, context.fingerprints}, fn key, {recovered, fingerprints} ->
         # Atom keys come from the declared whitelist — never String.to_atom
         # on stored input.
@@ -389,12 +412,8 @@ defmodule DurableStash do
 
   defp operable_context(socket) do
     case socket.private[@private_key] do
-      %Context{storage_key: storage_key, view: view} = context
-      when is_binary(storage_key) and is_binary(view) ->
-        {:ok, context}
-
-      %Context{} ->
-        :error
+      %Context{} = context ->
+        if operable?(context), do: {:ok, context}, else: :error
 
       nil ->
         Logger.error(
@@ -403,6 +422,10 @@ defmodule DurableStash do
 
         :error
     end
+  end
+
+  defp operable?(%Context{storage_key: storage_key, view: view}) do
+    is_binary(storage_key) and is_binary(view)
   end
 
   defp put_context(socket, %Context{} = context) do
@@ -433,8 +456,58 @@ defmodule DurableStash do
     nil
   end
 
-  defp session_keys(%Context{stored_keys: stored_keys}) do
-    for {key, :session} <- stored_keys, do: key
+  defp keys_for_scope(%Context{stored_keys: stored_keys}, scope) do
+    for {key, ^scope} <- stored_keys, do: key
+  end
+
+  defp recoverable_keys(%Context{reconnected?: true} = context) do
+    keys_for_scope(context, :session) ++ keys_for_scope(context, :reconnect)
+  end
+
+  defp recoverable_keys(%Context{} = context) do
+    keys_for_scope(context, :session)
+  end
+
+  # A reconnect (Wi-Fi drop, LiveView crash, deploy) rejoins the same client
+  # view, so `_mounts` is positive. A fresh navigation mounts at zero.
+  defp reconnected?(socket) do
+    match?(%{"_mounts" => mounts} when is_integer(mounts) and mounts > 0, connect_params(socket))
+  end
+
+  defp connect_params(socket) do
+    if LiveView.connected?(socket) do
+      LiveView.get_connect_params(socket) || %{}
+    else
+      %{}
+    end
+  rescue
+    # get_connect_params is only available while mounting; treat anything
+    # else as a fresh mount.
+    _error -> %{}
+  end
+
+  # Stock LiveStash semantics for :reconnect keys: a fresh mount starts the
+  # task over, so the stored values must go — otherwise a crash right after
+  # navigating here would resurrect a stale draft.
+  defp clear_stale_reconnect_keys(socket, %Context{} = context) do
+    reconnect_keys = keys_for_scope(context, :reconnect)
+
+    if reconnect_keys != [] and LiveView.connected?(socket) and not context.reconnected? and
+         operable?(context) do
+      keys = Enum.map(reconnect_keys, &Atom.to_string/1)
+
+      case call_session(context, &Session.drop(&1, context.view, keys)) do
+        :ok ->
+          :ok
+
+        {:error, reason} ->
+          Logger.error(
+            "[DurableStash] clearing reconnect keys failed for #{context.view}: #{inspect(reason)}"
+          )
+      end
+    end
+
+    :ok
   end
 
   defp fingerprint(encoded) when is_binary(encoded) do
@@ -448,8 +521,8 @@ defmodule DurableStash do
       key when is_atom(key) ->
         {key, :session}
 
-      {key, :session} when is_atom(key) ->
-        {key, :session}
+      {key, scope} when is_atom(key) and scope in [:session, :reconnect] ->
+        {key, scope}
 
       {key, :permanent} when is_atom(key) ->
         raise ArgumentError,
@@ -458,7 +531,7 @@ defmodule DurableStash do
       other ->
         raise ArgumentError,
               "[DurableStash] invalid stored_keys entry: #{inspect(other)} — " <>
-                "expected an atom or `{atom, :session}`"
+                "expected an atom, `{atom, :session}`, or `{atom, :reconnect}`"
     end)
   end
 

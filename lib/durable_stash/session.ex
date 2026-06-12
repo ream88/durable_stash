@@ -42,6 +42,11 @@ defmodule DurableStash.Session do
     GenServer.call(server, {:merge, view, vsn, changes})
   end
 
+  @doc "Removes `keys` from the view's data map. Unknown keys are ignored."
+  def drop(server, view, keys) when is_binary(view) and is_list(keys) do
+    GenServer.call(server, {:drop, view, keys})
+  end
+
   @doc "Returns the view's data map, `%{}` when the view has never stashed."
   def get_view(server, view) when is_binary(view) do
     GenServer.call(server, {:get_view, view})
@@ -87,6 +92,24 @@ defmodule DurableStash.Session do
 
     new_state = %{state | "views" => views, "last_seen_at" => now_ms()}
     {:reply, :ok, new_state, :sync}
+  end
+
+  def handle_call({:drop, view, keys}, _from, state) do
+    case Map.fetch(state["views"], view) do
+      {:ok, %{"data" => data} = slice} ->
+        new_data = Map.drop(data, keys)
+
+        if map_size(new_data) == map_size(data) do
+          {:reply, :ok, state}
+        else
+          views = Map.put(state["views"], view, %{slice | "data" => new_data})
+          new_state = %{state | "views" => views, "last_seen_at" => now_ms()}
+          {:reply, :ok, new_state, :sync}
+        end
+
+      :error ->
+        {:reply, :ok, state}
+    end
   end
 
   def handle_call({:get_view, view}, _from, state) do

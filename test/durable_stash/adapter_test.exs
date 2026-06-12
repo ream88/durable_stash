@@ -31,6 +31,15 @@ defmodule DurableStash.AdapterTest do
     %Phoenix.LiveView.Socket{view: view, assigns: %{__changed__: %{}}}
   end
 
+  defp fake_connected_socket(view, mounts) do
+    %Phoenix.LiveView.Socket{
+      view: view,
+      transport_pid: self(),
+      private: %{connect_params: %{"_mounts" => mounts}},
+      assigns: %{__changed__: %{}}
+    }
+  end
+
   defp init(socket, sid, supervisor, opts) do
     base_opts = [supervisor: supervisor]
 
@@ -43,7 +52,7 @@ defmodule DurableStash.AdapterTest do
 
       assert %Phoenix.LiveView.Socket{} =
                init(socket, context.sid, context.supervisor,
-                 stored_keys: [:plain, scoped: :session]
+                 stored_keys: [:plain, scoped: :session, draft: :reconnect]
                )
 
       assert_raise ArgumentError, ~r/:permanent scope is not yet supported/, fn ->
@@ -166,6 +175,74 @@ defmodule DurableStash.AdapterTest do
 
       assert final.assigns.host == "h2"
       assert final.assigns.theme == "t2"
+    end
+  end
+
+  describe ":reconnect scope" do
+    @mixed_keys [theme: :session, draft: :reconnect]
+
+    test "recovers on reconnects, clears on fresh connected mounts", context do
+      fake_connected_socket(FakeView, 0)
+      |> init(context.sid, context.supervisor, stored_keys: @mixed_keys)
+      |> Phoenix.Component.assign(theme: "dark", draft: "half-typed")
+      |> DurableStash.stash()
+
+      {:recovered, rejoined} =
+        fake_connected_socket(FakeView, 1)
+        |> init(context.sid, context.supervisor, stored_keys: @mixed_keys)
+        |> DurableStash.recover_state()
+
+      assert rejoined.assigns.theme == "dark"
+      assert rejoined.assigns.draft == "half-typed"
+
+      {:recovered, fresh} =
+        fake_connected_socket(FakeView, 0)
+        |> init(context.sid, context.supervisor, stored_keys: @mixed_keys)
+        |> DurableStash.recover_state()
+
+      assert fresh.assigns.theme == "dark"
+      refute Map.has_key?(fresh.assigns, :draft)
+
+      # The fresh mount dropped the draft from the store itself.
+      storage_key = fresh.private.durable_stash.storage_key
+
+      {:ok, {pid, _meta}} =
+        DurableServer.Supervisor.ensure_started_child(
+          context.supervisor,
+          {Session, key: storage_key, initial_state: %{}}
+        )
+
+      assert Session.get_view(pid, Atom.to_string(FakeView)) == %{"theme" => "dark"}
+    end
+
+    test "a disconnected mount filters reconnect keys without dropping them", context do
+      fake_connected_socket(FakeView, 0)
+      |> init(context.sid, context.supervisor, stored_keys: @mixed_keys)
+      |> Phoenix.Component.assign(theme: "dark", draft: "half-typed")
+      |> DurableStash.stash()
+
+      {:recovered, disconnected} =
+        fake_socket(FakeView)
+        |> init(context.sid, context.supervisor, stored_keys: @mixed_keys)
+        |> DurableStash.recover_state()
+
+      assert disconnected.assigns.theme == "dark"
+      refute Map.has_key?(disconnected.assigns, :draft)
+
+      # No client to rejoin from a disconnected render, so the draft stays
+      # stored for the connected mount that follows.
+      storage_key = disconnected.private.durable_stash.storage_key
+
+      {:ok, {pid, _meta}} =
+        DurableServer.Supervisor.ensure_started_child(
+          context.supervisor,
+          {Session, key: storage_key, initial_state: %{}}
+        )
+
+      assert Session.get_view(pid, Atom.to_string(FakeView)) == %{
+               "theme" => "dark",
+               "draft" => "half-typed"
+             }
     end
   end
 

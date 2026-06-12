@@ -58,6 +58,19 @@ defmodule DurableStash.LiveViewLifecycleTest do
     refute html =~ "alice"
   end
 
+  # The reconnect side of the :reconnect scope cannot be exercised here:
+  # LiveViewTest's client proxy pins `_mounts` to 0 on every join (it has no
+  # rejoin concept). The fake-socket unit tests in adapter_test.exs cover it.
+  test ":reconnect keys clear on fresh remounts while :session keys survive" do
+    conn = get(build_conn(), "/draft")
+    {:ok, view, _html} = live(conn)
+    render_click(view, "save", %{"theme" => "dark", "draft" => "half-typed"})
+
+    {:ok, _view, html} = conn |> get("/draft") |> live()
+    assert html =~ "dark"
+    refute html =~ "half-typed"
+  end
+
   test "two views of one session keep separate slices" do
     conn = build_conn()
     {conn, demo_view, _html} = mount_demo(conn)

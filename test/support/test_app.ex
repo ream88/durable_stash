@@ -60,6 +60,34 @@ defmodule DurableStash.TestApp.OtherLive do
   end
 end
 
+defmodule DurableStash.TestApp.DraftLive do
+  @moduledoc false
+  use Phoenix.LiveView
+
+  use LiveStash,
+    adapter: DurableStash,
+    stored_keys: [theme: :session, draft: :reconnect],
+    supervisor: DurableStash.TestApp.StashSupervisor
+
+  def mount(_params, _session, socket) do
+    socket = assign(socket, theme: "light", draft: "empty")
+    {_status, socket} = LiveStash.recover_state(socket)
+    {:ok, socket}
+  end
+
+  def render(assigns) do
+    ~H"""
+    <div id="theme">{@theme}</div>
+    <div id="draft">{@draft}</div>
+    """
+  end
+
+  def handle_event("save", params, socket) do
+    socket = assign(socket, theme: params["theme"], draft: params["draft"])
+    {:noreply, LiveStash.stash(socket)}
+  end
+end
+
 defmodule DurableStash.TestApp.Router do
   @moduledoc false
   use Phoenix.Router
@@ -76,6 +104,7 @@ defmodule DurableStash.TestApp.Router do
     live_session :default, root_layout: false do
       live("/demo", DemoLive)
       live("/other", OtherLive)
+      live("/draft", DraftLive)
     end
   end
 

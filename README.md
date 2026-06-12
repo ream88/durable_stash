@@ -53,6 +53,11 @@ config, the `ensure_session_id` plug) and all options (`:vsn`, `:migrate`,
   never lose acknowledged state.
 - Values are JSON-normalized at stash time — what you recover in dev is
   exactly what you would recover after a redeploy in prod.
+- Each key declares a recovery scope: `:session` keys (the default) come back
+  on every mount; `:reconnect` keys come back only when the client rejoins
+  (crash, Wi-Fi drop, deploy) and clear on fresh navigation — for form
+  drafts that should survive a redeploy mid-edit but start blank on "new
+  thing".
 
 `DurableStash.TestBackend` ships with the package: a faithful in-memory
 `DurableServer.StorageBackend` (including etag CAS) for tests and `make run`
