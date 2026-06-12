@@ -38,9 +38,29 @@ defmodule MyAppWeb.SomeLive do
 end
 ```
 
+## Scopes
+
+Not all state wants the same recovery policy, so each stored key declares one:
+
+```elixir
+use LiveStash, adapter: DurableStash,
+  stored_keys: [
+    theme: :session,    # recover on every mount (the default for bare atoms)
+    draft: :reconnect   # recover only on rejoins; cleared on fresh navigation
+  ]
+```
+
+- `:session` — recovered on every mount: live navigation, reconnects, crashes,
+  redeploys. Right for settings the user expects to stick.
+- `:reconnect` — recovered only when the client *rejoins* an existing view
+  (`_mounts > 0`): Wi-Fi drops, LiveView crashes, and redeploys — the browser
+  stays on the page through all of these. A fresh navigation to the view
+  clears the stored values, so starting a new thing starts blank. Right for
+  in-progress form drafts.
+
 See the `DurableStash` moduledoc for setup (adapter registration, backend
 config, the `ensure_session_id` plug) and all options (`:vsn`, `:migrate`,
-`:secret`, per-key scopes).
+`:secret`).
 
 ## How it works
 
@@ -53,11 +73,6 @@ config, the `ensure_session_id` plug) and all options (`:vsn`, `:migrate`,
   never lose acknowledged state.
 - Values are JSON-normalized at stash time — what you recover in dev is
   exactly what you would recover after a redeploy in prod.
-- Each key declares a recovery scope: `:session` keys (the default) come back
-  on every mount; `:reconnect` keys come back only when the client rejoins
-  (crash, Wi-Fi drop, deploy) and clear on fresh navigation — for form
-  drafts that should survive a redeploy mid-edit but start blank on "new
-  thing".
 
 `DurableStash.TestBackend` ships with the package: a faithful in-memory
 `DurableServer.StorageBackend` (including etag CAS) for tests and `make run`
@@ -65,12 +80,10 @@ style development without S3 credentials.
 
 ## Installation
 
-Not yet on Hex; consume as a path or git dependency:
-
 ```elixir
 def deps do
   [
-    {:durable_stash, path: "../durable_stash"}
+    {:durable_stash, "~> 0.1.0"}
   ]
 end
 ```
@@ -80,6 +93,6 @@ end
 DurableStash stands on two lineages:
 
 - the adapter API of **[LiveStash](https://github.com/software-mansion-labs/live-stash)**
-  by Software Mansion (Apache-2.0)
+  by Software Mansion
 - the durable-process runtime of **[DurableServer](https://github.com/phoenixframework/durable_server)**
-  by Chris McCord (MIT)
+  by Chris McCord
