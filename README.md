@@ -1,11 +1,14 @@
 # DurableStash
 
-Durable, browser-session-scoped server state for Phoenix LiveView.
+Keep Phoenix LiveView state alive across reconnects, crashes, and redeploys.
 
-DurableStash is a [LiveStash](https://github.com/software-mansion-labs/live-stash)
-adapter backed by [DurableServer](https://hex.pm/packages/durable_server): one
-durable process per browser session, persisted to S3-compatible object storage,
-shared by every LiveView of that session.
+A LiveView's assigns live in memory and vanish when the socket drops, the
+process crashes, or you deploy. DurableStash saves the assigns you pick to
+object storage and restores them the next time the LiveView mounts. The saved
+copy belongs to the browser session, so every LiveView the user opens shares
+it. Under the hood it plugs into
+[LiveStash](https://github.com/software-mansion-labs/live-stash) and stores
+state through [DurableServer](https://hex.pm/packages/durable_server).
 
 State survives:
 
