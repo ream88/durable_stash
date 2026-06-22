@@ -57,7 +57,14 @@ defmodule DurableStash.MixProject do
     [
       main: "DurableStash",
       source_url: @source_url,
-      extras: ["README.md", "CHANGELOG.md"]
+      extras: ["README.md", "CHANGELOG.md"],
+      # These live in the sibling durable_server/live_stash packages and are
+      # hidden there, so ExDoc can't link them — reference as plain code spans.
+      skip_code_autolink_to: [
+        "DurableServer.StorageBackend",
+        "DurableServer.Backends.ObjectStore",
+        "LiveStash.Application"
+      ]
     ]
   end
 end
