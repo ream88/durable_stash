@@ -3,6 +3,7 @@ defmodule DurableStash.SessionTest do
   # tests share global state and cannot run async.
   use ExUnit.Case, async: false
 
+  alias DurableStash.BlockingBackend
   alias DurableStash.Session
   alias DurableStash.TestBackend
 
@@ -36,6 +37,32 @@ defmodule DurableStash.SessionTest do
 
     :ok = Session.reset_view(pid, @view)
     assert Session.fetch_view(pid, @view) == :not_found
+  end
+
+  test "a write replies before the storage PUT runs", context do
+    %{backend: backend, prefix: prefix, unique: unique} = context
+    supervisor = :"blocking_sup_#{unique}"
+
+    start_supervised!(
+      {DurableServer.Supervisor,
+       name: supervisor, prefix: prefix, backend: {BlockingBackend, name: backend}}
+    )
+
+    {:ok, {pid, _meta}} = ensure_session(supervisor, "session-1")
+
+    on_exit(&BlockingBackend.disarm/0)
+    BlockingBackend.arm(self(), prefix <> "session-1")
+
+    # A synchronous write would block here inside the PUT; the reply must land
+    # first, then the PUT runs in the session process.
+    :ok = Session.merge(pid, @view, %{"username" => "alice"})
+
+    assert_receive {:put_blocked, ^pid}, 1_000
+    send(pid, :release)
+
+    # Disarm before teardown: the session's graceful-stop status sync writes
+    # the same key, and supervised processes stop before on_exit runs.
+    BlockingBackend.disarm()
   end
 
   test "a write under a new vsn replaces the slice instead of merging", context do

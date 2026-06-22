@@ -21,9 +21,13 @@ defmodule DurableStash.Session do
   only does that with a full, migrated key set, so a version bump can never
   mix old- and new-shape keys.
 
-  Every accepted write returns `:sync`, so durability is guaranteed before a
-  deploy can take the node down. Writes are rare UI state; the immediate
-  object-store PUT is the point, not a cost.
+  Writes merge in memory and reply immediately; the object-store PUT then runs
+  in a `handle_continue/2` on this same process, *after* the reply is sent — so
+  a write never blocks the calling LiveView on the network round-trip.
+  Durability lands a continue later, and `DurableServer` also flushes on its
+  periodic interval and on graceful shutdown. A synchronous PUT inside every
+  write — the previous behaviour — is what made `auto_stash` form views feel
+  sluggish under per-keystroke validation.
   """
 
   use DurableServer, vsn: 1
@@ -91,7 +95,7 @@ defmodule DurableStash.Session do
       end)
 
     new_state = %{state | "views" => views, "last_seen_at" => now_ms()}
-    {:reply, :ok, new_state, :sync}
+    {:reply, :ok, new_state, {:continue, :sync}}
   end
 
   def handle_call({:drop, view, keys}, _from, state) do
@@ -104,7 +108,7 @@ defmodule DurableStash.Session do
         else
           views = Map.put(state["views"], view, %{slice | "data" => new_data})
           new_state = %{state | "views" => views, "last_seen_at" => now_ms()}
-          {:reply, :ok, new_state, :sync}
+          {:reply, :ok, new_state, {:continue, :sync}}
         end
 
       :error ->
@@ -131,7 +135,12 @@ defmodule DurableStash.Session do
         "last_seen_at" => now_ms()
     }
 
-    {:reply, :ok, new_state, :sync}
+    {:reply, :ok, new_state, {:continue, :sync}}
+  end
+
+  @impl true
+  def handle_continue(:sync, state) do
+    {:noreply, state, sync: true}
   end
 
   defp fresh_state, do: %{"views" => %{}, "last_seen_at" => nil}

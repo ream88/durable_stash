@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.1 (2026-06-22)
+
+- Writes no longer block the calling LiveView on the object-store PUT. Each
+  stash merged in memory and then ran the S3 round-trip *inside* the
+  `handle_call`, so under `auto_stash: true` every keystroke paid the network
+  latency and the writing view felt sluggish. Writes now reply first and flush
+  in a `handle_continue/2`, keeping the LiveView off the round-trip while still
+  persisting each write.
+
 ## 0.1.0 (2026-06-12)
 
 Initial release.
