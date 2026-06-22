@@ -91,6 +91,7 @@ end
 defmodule DurableStash.TestApp.Router do
   @moduledoc false
   use Phoenix.Router
+
   import Phoenix.LiveView.Router
 
   pipeline :browser do

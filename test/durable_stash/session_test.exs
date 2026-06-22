@@ -44,8 +44,7 @@ defmodule DurableStash.SessionTest do
     supervisor = :"blocking_sup_#{unique}"
 
     start_supervised!(
-      {DurableServer.Supervisor,
-       name: supervisor, prefix: prefix, backend: {BlockingBackend, name: backend}}
+      {DurableServer.Supervisor, name: supervisor, prefix: prefix, backend: {BlockingBackend, name: backend}}
     )
 
     {:ok, {pid, _meta}} = ensure_session(supervisor, "session-1")
@@ -125,10 +124,7 @@ defmodule DurableStash.SessionTest do
   defp start_stash_supervisor(%{backend: backend, prefix: prefix, unique: unique}, id) do
     name = :"stash_#{id}_#{unique}"
 
-    start_supervised!(
-      {DurableServer.Supervisor,
-       name: name, prefix: prefix, backend: {TestBackend, name: backend}}
-    )
+    start_supervised!({DurableServer.Supervisor, name: name, prefix: prefix, backend: {TestBackend, name: backend}})
 
     name
   end

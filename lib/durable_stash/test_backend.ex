@@ -130,8 +130,7 @@ defmodule DurableStash.TestBackend do
             _existing_or_unconditional ->
               etag = new_etag()
 
-              {{:ok, etag},
-               %{store | objects: Map.put(objects, key, %{body: encoded, etag: etag})}}
+              {{:ok, etag}, %{store | objects: Map.put(objects, key, %{body: encoded, etag: etag})}}
           end
         end)
 
@@ -162,8 +161,7 @@ defmodule DurableStash.TestBackend do
         else
           etag = new_etag()
 
-          {{:ok, {:claimed, etag}},
-           %{store | objects: Map.put(objects, key, %{body: encoded, etag: etag})}}
+          {{:ok, {:claimed, etag}}, %{store | objects: Map.put(objects, key, %{body: encoded, etag: etag})}}
         end
       end)
     end
@@ -183,8 +181,7 @@ defmodule DurableStash.TestBackend do
 
   ## Internals
 
-  defp do_update_object(_name, _key, _update_fn, attempt, max_retries)
-       when attempt > max_retries do
+  defp do_update_object(_name, _key, _update_fn, attempt, max_retries) when attempt > max_retries do
     {:error, :max_retries_exceeded}
   end
 

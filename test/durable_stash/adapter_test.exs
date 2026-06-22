@@ -6,6 +6,7 @@ defmodule DurableStash.AdapterTest do
 
   alias DurableStash.Session
   alias DurableStash.TestBackend
+  alias Phoenix.LiveView.Socket
 
   defmodule FakeView do
   end
@@ -28,11 +29,11 @@ defmodule DurableStash.AdapterTest do
   end
 
   defp fake_socket(view) do
-    %Phoenix.LiveView.Socket{view: view, assigns: %{__changed__: %{}}}
+    %Socket{view: view, assigns: %{__changed__: %{}}}
   end
 
   defp fake_connected_socket(view, mounts) do
-    %Phoenix.LiveView.Socket{
+    %Socket{
       view: view,
       transport_pid: self(),
       private: %{connect_params: %{"_mounts" => mounts}},
@@ -50,10 +51,8 @@ defmodule DurableStash.AdapterTest do
     test "accepts bare atoms and :session scope, rejects the rest", context do
       socket = fake_socket(FakeView)
 
-      assert %Phoenix.LiveView.Socket{} =
-               init(socket, context.sid, context.supervisor,
-                 stored_keys: [:plain, scoped: :session, draft: :reconnect]
-               )
+      assert %Socket{} =
+               init(socket, context.sid, context.supervisor, stored_keys: [:plain, scoped: :session, draft: :reconnect])
 
       assert_raise ArgumentError, ~r/:permanent scope is not yet supported/, fn ->
         init(socket, context.sid, context.supervisor, stored_keys: [theme: :permanent])
@@ -76,13 +75,15 @@ defmodule DurableStash.AdapterTest do
 
   describe "stash + recover round trip" do
     test "a second socket in the same session recovers the stashed assigns", context do
-      fake_socket(FakeView)
+      FakeView
+      |> fake_socket()
       |> init(context.sid, context.supervisor, stored_keys: [:host, :count])
       |> Phoenix.Component.assign(host: "https://example.test", count: 3)
       |> DurableStash.stash()
 
       socket_b =
-        fake_socket(FakeView)
+        FakeView
+        |> fake_socket()
         |> init(context.sid, context.supervisor, stored_keys: [:host, :count])
         |> Phoenix.Component.assign(host: "unset", count: 0)
 
@@ -93,7 +94,8 @@ defmodule DurableStash.AdapterTest do
 
     test "recovers on every mount — nothing stashed means :not_found", context do
       socket =
-        fake_socket(FakeView)
+        FakeView
+        |> fake_socket()
         |> init(context.sid, context.supervisor, stored_keys: [:host])
 
       assert {:not_found, ^socket} = DurableStash.recover_state(socket)
@@ -102,7 +104,8 @@ defmodule DurableStash.AdapterTest do
     test "values are normalized through JSON: atom-keyed maps come back string-keyed",
          context do
       socket_a =
-        fake_socket(FakeView)
+        FakeView
+        |> fake_socket()
         |> init(context.sid, context.supervisor, stored_keys: [:settings])
         |> Phoenix.Component.assign(settings: %{retries: 2})
         |> DurableStash.stash()
@@ -116,26 +119,30 @@ defmodule DurableStash.AdapterTest do
     end
 
     test "views are isolated within one session", context do
-      fake_socket(FakeView)
+      FakeView
+      |> fake_socket()
       |> init(context.sid, context.supervisor, stored_keys: [:host])
       |> Phoenix.Component.assign(host: "https://example.test")
       |> DurableStash.stash()
 
       other_socket =
-        fake_socket(OtherFakeView)
+        OtherFakeView
+        |> fake_socket()
         |> init(context.sid, context.supervisor, stored_keys: [:host])
 
       assert {:not_found, _socket} = DurableStash.recover_state(other_socket)
     end
 
     test "sessions are isolated", context do
-      fake_socket(FakeView)
+      FakeView
+      |> fake_socket()
       |> init(context.sid, context.supervisor, stored_keys: [:host])
       |> Phoenix.Component.assign(host: "https://example.test")
       |> DurableStash.stash()
 
       other_session_socket =
-        fake_socket(FakeView)
+        FakeView
+        |> fake_socket()
         |> init("other-#{context.sid}", context.supervisor, stored_keys: [:host])
 
       assert {:not_found, _socket} = DurableStash.recover_state(other_session_socket)
@@ -146,7 +153,8 @@ defmodule DurableStash.AdapterTest do
     test "an unchanged stash is a no-op and disjoint keys merge without lost updates",
          context do
       socket_a =
-        fake_socket(FakeView)
+        FakeView
+        |> fake_socket()
         |> init(context.sid, context.supervisor, stored_keys: [:host, :theme])
         |> Phoenix.Component.assign(host: "h1", theme: "t1")
         |> DurableStash.stash()
@@ -154,7 +162,8 @@ defmodule DurableStash.AdapterTest do
       assert DurableStash.stash(socket_a) == socket_a
 
       {:recovered, socket_b} =
-        fake_socket(FakeView)
+        FakeView
+        |> fake_socket()
         |> init(context.sid, context.supervisor, stored_keys: [:host, :theme])
         |> DurableStash.recover_state()
 
@@ -169,7 +178,8 @@ defmodule DurableStash.AdapterTest do
       |> DurableStash.stash()
 
       {:recovered, final} =
-        fake_socket(FakeView)
+        FakeView
+        |> fake_socket()
         |> init(context.sid, context.supervisor, stored_keys: [:host, :theme])
         |> DurableStash.recover_state()
 
@@ -182,13 +192,15 @@ defmodule DurableStash.AdapterTest do
     @mixed_keys [theme: :session, draft: :reconnect]
 
     test "recovers on reconnects, clears on fresh connected mounts", context do
-      fake_connected_socket(FakeView, 0)
+      FakeView
+      |> fake_connected_socket(0)
       |> init(context.sid, context.supervisor, stored_keys: @mixed_keys)
       |> Phoenix.Component.assign(theme: "dark", draft: "half-typed")
       |> DurableStash.stash()
 
       {:recovered, rejoined} =
-        fake_connected_socket(FakeView, 1)
+        FakeView
+        |> fake_connected_socket(1)
         |> init(context.sid, context.supervisor, stored_keys: @mixed_keys)
         |> DurableStash.recover_state()
 
@@ -196,7 +208,8 @@ defmodule DurableStash.AdapterTest do
       assert rejoined.assigns.draft == "half-typed"
 
       {:recovered, fresh} =
-        fake_connected_socket(FakeView, 0)
+        FakeView
+        |> fake_connected_socket(0)
         |> init(context.sid, context.supervisor, stored_keys: @mixed_keys)
         |> DurableStash.recover_state()
 
@@ -216,13 +229,15 @@ defmodule DurableStash.AdapterTest do
     end
 
     test "a disconnected mount filters reconnect keys without dropping them", context do
-      fake_connected_socket(FakeView, 0)
+      FakeView
+      |> fake_connected_socket(0)
       |> init(context.sid, context.supervisor, stored_keys: @mixed_keys)
       |> Phoenix.Component.assign(theme: "dark", draft: "half-typed")
       |> DurableStash.stash()
 
       {:recovered, disconnected} =
-        fake_socket(FakeView)
+        FakeView
+        |> fake_socket()
         |> init(context.sid, context.supervisor, stored_keys: @mixed_keys)
         |> DurableStash.recover_state()
 
@@ -248,13 +263,15 @@ defmodule DurableStash.AdapterTest do
 
   describe "vsn and migrate" do
     test "a vsn mismatch without migrate discards to defaults", context do
-      fake_socket(FakeView)
+      FakeView
+      |> fake_socket()
       |> init(context.sid, context.supervisor, stored_keys: [:host], vsn: 1)
       |> Phoenix.Component.assign(host: "old")
       |> DurableStash.stash()
 
       bumped_socket =
-        fake_socket(FakeView)
+        FakeView
+        |> fake_socket()
         |> init(context.sid, context.supervisor, stored_keys: [:host], vsn: 2)
 
       assert {:not_found, _socket} = DurableStash.recover_state(bumped_socket)
@@ -262,7 +279,8 @@ defmodule DurableStash.AdapterTest do
 
     test "migrate transforms the stored data and writes it back under the new vsn",
          context do
-      fake_socket(FakeView)
+      FakeView
+      |> fake_socket()
       |> init(context.sid, context.supervisor, stored_keys: [:host], vsn: 1)
       |> Phoenix.Component.assign(host: "example.test")
       |> DurableStash.stash()
@@ -270,7 +288,8 @@ defmodule DurableStash.AdapterTest do
       migrate = fn 1, %{"host" => host} -> %{"host" => "https://" <> host} end
 
       {:recovered, recovered} =
-        fake_socket(FakeView)
+        FakeView
+        |> fake_socket()
         |> init(context.sid, context.supervisor, stored_keys: [:host], vsn: 2, migrate: migrate)
         |> DurableStash.recover_state()
 
@@ -293,7 +312,8 @@ defmodule DurableStash.AdapterTest do
   describe "JSON-safety guards" do
     test "raises when configured to (test default)", context do
       socket =
-        fake_socket(FakeView)
+        FakeView
+        |> fake_socket()
         |> init(context.sid, context.supervisor, stored_keys: [:bad])
         |> Phoenix.Component.assign(bad: {:a, :tuple})
 
@@ -305,7 +325,8 @@ defmodule DurableStash.AdapterTest do
       on_exit(fn -> Application.put_env(:durable_stash, :on_invalid_value, :raise) end)
 
       socket =
-        fake_socket(FakeView)
+        FakeView
+        |> fake_socket()
         |> init(context.sid, context.supervisor, stored_keys: [:good, :bad])
         |> Phoenix.Component.assign(good: "kept", bad: {:a, :tuple})
 
@@ -317,7 +338,8 @@ defmodule DurableStash.AdapterTest do
       assert log =~ "not JSON-safe"
 
       {:recovered, recovered} =
-        fake_socket(FakeView)
+        FakeView
+        |> fake_socket()
         |> init(context.sid, context.supervisor, stored_keys: [:good, :bad])
         |> DurableStash.recover_state()
 
@@ -348,7 +370,8 @@ defmodule DurableStash.AdapterTest do
 
     test "unreachable supervisor: stash logs and returns the socket", context do
       socket =
-        fake_socket(FakeView)
+        FakeView
+        |> fake_socket()
         |> init(context.sid, :nonexistent_supervisor, stored_keys: [:host])
         |> Phoenix.Component.assign(host: "value")
 
@@ -365,7 +388,8 @@ defmodule DurableStash.AdapterTest do
   describe "reset_stash/1" do
     test "clears the view slice", context do
       socket =
-        fake_socket(FakeView)
+        FakeView
+        |> fake_socket()
         |> init(context.sid, context.supervisor, stored_keys: [:host])
         |> Phoenix.Component.assign(host: "value")
         |> DurableStash.stash()
@@ -373,7 +397,8 @@ defmodule DurableStash.AdapterTest do
       DurableStash.reset_stash(socket)
 
       assert {:not_found, _socket} =
-               fake_socket(FakeView)
+               FakeView
+               |> fake_socket()
                |> init(context.sid, context.supervisor, stored_keys: [:host])
                |> DurableStash.recover_state()
     end

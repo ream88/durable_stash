@@ -36,7 +36,8 @@ defmodule DurableStash.MixProject do
       {:live_stash, "~> 0.3"},
       {:phoenix_live_view, "~> 1.0", optional: true},
       {:lazy_html, ">= 0.1.0", only: :test},
-      {:ex_doc, "~> 0.34", only: :dev, runtime: false}
+      {:ex_doc, "~> 0.34", only: :dev, runtime: false},
+      {:styler, "~> 1.0", only: [:dev, :test], runtime: false}
     ]
   end
 

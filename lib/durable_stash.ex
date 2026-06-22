@@ -112,11 +112,11 @@ defmodule DurableStash do
 
   @behaviour LiveStash.Adapter
 
-  require Logger
-
   alias DurableStash.Session
   alias Phoenix.Component
   alias Phoenix.LiveView
+
+  require Logger
 
   defmodule Context do
     @moduledoc false
@@ -218,8 +218,7 @@ defmodule DurableStash do
           [
             {DurableServer.Supervisor,
              [
-               name:
-                 Application.get_env(:durable_stash, :supervisor_name, DurableStash.Supervisor),
+               name: Application.get_env(:durable_stash, :supervisor_name, DurableStash.Supervisor),
                prefix: Application.get_env(:durable_stash, :prefix, "durable_stash/"),
                backend: backend
              ] ++ supervisor_opts}
@@ -260,8 +259,7 @@ defmodule DurableStash do
         if fingerprints[name] == fingerprint do
           {changes, fingerprints}
         else
-          {Map.put(changes, name, JSON.decode!(encoded)),
-           Map.put(fingerprints, name, fingerprint)}
+          {Map.put(changes, name, JSON.decode!(encoded)), Map.put(fingerprints, name, fingerprint)}
         end
       else
         :error -> {changes, fingerprints}
@@ -345,9 +343,7 @@ defmodule DurableStash do
         {:recovered, socket}
 
       {:error, reason} ->
-        Logger.error(
-          "[DurableStash] migrated write-back failed for #{context.view}: #{inspect(reason)}"
-        )
+        Logger.error("[DurableStash] migrated write-back failed for #{context.view}: #{inspect(reason)}")
 
         {:recovered, socket}
     end
@@ -364,8 +360,7 @@ defmodule DurableStash do
           {:ok, value} ->
             fingerprint = fingerprint(JSON.encode!(value))
 
-            {Map.put(recovered, key, value),
-             Map.put(fingerprints, Atom.to_string(key), fingerprint)}
+            {Map.put(recovered, key, value), Map.put(fingerprints, Atom.to_string(key), fingerprint)}
 
           :error ->
             {recovered, fingerprints}
@@ -418,9 +413,7 @@ defmodule DurableStash do
         if operable?(context), do: {:ok, context}, else: :error
 
       nil ->
-        Logger.error(
-          "[DurableStash] no stash context on socket — did you `use LiveStash, adapter: DurableStash`?"
-        )
+        Logger.error("[DurableStash] no stash context on socket — did you `use LiveStash, adapter: DurableStash`?")
 
         :error
     end
@@ -503,9 +496,7 @@ defmodule DurableStash do
           :ok
 
         {:error, reason} ->
-          Logger.error(
-            "[DurableStash] clearing reconnect keys failed for #{context.view}: #{inspect(reason)}"
-          )
+          Logger.error("[DurableStash] clearing reconnect keys failed for #{context.view}: #{inspect(reason)}")
       end
     end
 

@@ -41,8 +41,7 @@ defmodule DurableStash.Session do
   When the stored slice carries a different `vsn`, the slice is replaced with
   `changes` wholesale (see the moduledoc).
   """
-  def merge(server, view, changes, vsn \\ 1)
-      when is_binary(view) and is_map(changes) and is_integer(vsn) do
+  def merge(server, view, changes, vsn \\ 1) when is_binary(view) and is_map(changes) and is_integer(vsn) do
     GenServer.call(server, {:merge, view, vsn, changes})
   end
 
