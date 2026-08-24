@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.2 (2026-08-24)
 
 - Recovery no longer starts a session when nothing is in scope to recover. A
   view whose keys are all `:reconnect` had no recoverable state on a fresh or
