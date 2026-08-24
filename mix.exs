@@ -6,7 +6,7 @@ defmodule DurableStash.MixProject do
   def project do
     [
       app: :durable_stash,
-      version: "0.1.2",
+      version: "0.1.3",
       description: "Keep LiveView state alive across reconnects, crashes, and redeploys",
       elixir: "~> 1.19",
       start_permanent: Mix.env() == :prod,
@@ -33,7 +33,7 @@ defmodule DurableStash.MixProject do
   defp deps do
     [
       {:durable_server, "~> 0.1.4"},
-      {:live_stash, "~> 1.0"},
+      {:live_stash, "~> 0.3 or ~> 1.0"},
       {:phoenix_live_view, "~> 1.0", optional: true},
       {:lazy_html, ">= 0.1.0", only: :test},
       {:ex_doc, "~> 0.34", only: :dev, runtime: false},

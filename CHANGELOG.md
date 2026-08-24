@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.3 (2026-08-24)
+
+- `live_stash` 0.3 works again. 0.1.2 raised the requirement to `~> 1.0`,
+  which is a major bump for anyone on 0.3 and does not belong in a patch
+  release. LiveStash 1.0 also refuses `use LiveStash` inside a nested
+  LiveView, so the upgrade breaks any consumer stashing in one. The
+  requirement is now `~> 0.3 or ~> 1.0` and the suite runs green against
+  both — pick the version your app wants.
+
 ## 0.1.2 (2026-08-24)
 
 - Recovery no longer starts a session when nothing is in scope to recover. A
