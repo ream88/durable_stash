@@ -34,8 +34,6 @@ defmodule DurableStash.MixProject do
     [
       {:durable_server, "~> 0.1.4"},
       {:live_stash, "~> 1.0"},
-      # TODO: drop override once req_s3 supports req 0.6 (pinned to ~> 0.5.6; override needed for CVE-2026-49755)
-      {:req, "~> 0.6", override: true},
       {:phoenix_live_view, "~> 1.0", optional: true},
       {:lazy_html, ">= 0.1.0", only: :test},
       {:ex_doc, "~> 0.34", only: :dev, runtime: false},

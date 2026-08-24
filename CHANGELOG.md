@@ -8,6 +8,11 @@
   so every crawler request to a public form left a stash in the bucket, and
   the read sat in the HTTP render path. Such a mount now returns `:not_found`
   without touching the store.
+- The `req` version is no longer forced on your application. `req` was
+  declared here only to hold the tree above a CVE, which a package may not do
+  — Hex refuses to build one that overrides a dependency, and `lib/` never
+  called `Req` in the first place. `req_s3` now accepts `req` 0.6 and 0.7, so
+  the pin it worked around is gone.
 
 ## 0.1.1 (2026-06-22)
 
