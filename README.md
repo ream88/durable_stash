@@ -30,7 +30,15 @@ defmodule MyAppWeb.SomeLive do
 
   def mount(_params, _session, socket) do
     socket = assign(socket, count: 0, username: nil)
-    {_status, socket} = LiveStash.recover_state(socket)
+
+    socket =
+      if connected?(socket) do
+        {_status, socket} = LiveStash.recover_state(socket)
+        socket
+      else
+        socket
+      end
+
     {:ok, socket}
   end
 
@@ -40,6 +48,13 @@ defmodule MyAppWeb.SomeLive do
   end
 end
 ```
+
+`mount/3` runs twice — once for the HTTP render, once when the socket
+connects — and recovery on the HTTP render costs an object-store round-trip.
+A view with only `:reconnect` keys skips it, since nothing is recoverable
+without a socket. A view with `:session` keys pays it so the stored value
+makes the first paint; guard the call with `connected?/1` if you would rather
+it did not. See the `DurableStash` moduledoc.
 
 ## Scopes
 

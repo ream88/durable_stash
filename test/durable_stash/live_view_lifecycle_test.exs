@@ -18,6 +18,14 @@ defmodule DurableStash.LiveViewLifecycleTest do
     {conn, view, html}
   end
 
+  # The node heartbeat object is rewritten constantly; only session stashes
+  # say whether a request touched the store.
+  defp stashed_objects do
+    DurableStash.TestApp.Backend
+    |> DurableStash.TestBackend.dump()
+    |> Map.reject(fn {key, _object} -> String.contains?(key, "__nodes/") end)
+  end
+
   test "a stashed assign survives navigation away and back (remount)" do
     {conn, view, html} = mount_demo(build_conn())
     assert html =~ "guest"
@@ -35,6 +43,24 @@ defmodule DurableStash.LiveViewLifecycleTest do
 
     conn = get(conn, "/demo")
     assert html_response(conn, 200) =~ "alice"
+  end
+
+  test "a page render of a reconnect-only view leaves nothing in the store" do
+    stored = stashed_objects()
+
+    get(build_conn(), "/draft-only")
+
+    assert stashed_objects() == stored
+  end
+
+  test "a reconnect-only view still stashes over a live socket" do
+    conn = get(build_conn(), "/draft-only")
+    {:ok, view, _html} = live(conn)
+    stored = stashed_objects()
+
+    render_click(view, "save", %{"draft" => "half-typed"})
+
+    assert stashed_objects() != stored
   end
 
   test "a different browser session gets the defaults" do

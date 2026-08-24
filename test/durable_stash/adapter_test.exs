@@ -41,6 +41,13 @@ defmodule DurableStash.AdapterTest do
     }
   end
 
+  defp stored?(backend, storage_key) do
+    backend
+    |> TestBackend.dump()
+    |> Map.keys()
+    |> Enum.any?(&String.ends_with?(&1, storage_key))
+  end
+
   defp init(socket, sid, supervisor, opts) do
     base_opts = [supervisor: supervisor]
 
@@ -258,6 +265,17 @@ defmodule DurableStash.AdapterTest do
                "theme" => "dark",
                "draft" => "half-typed"
              }
+    end
+
+    test "a disconnected mount with only reconnect keys never reaches the store", context do
+      socket =
+        FakeView
+        |> fake_socket()
+        |> init(context.sid, context.supervisor, stored_keys: [draft: :reconnect])
+
+      assert {:not_found, ^socket} = DurableStash.recover_state(socket)
+
+      refute stored?(context.backend, socket.private.durable_stash.storage_key)
     end
   end
 

@@ -30,7 +30,42 @@ defmodule DurableStash do
 
   Unlike the stock ETS adapter, `DurableStash` recovers on **every** mount —
   fresh navigations included — and never deletes the stash on mount. State is
-  keyed by the browser session, not by the socket.
+  keyed by the browser session, not by the socket. See *Disconnected mounts*
+  for what that means on the HTTP render.
+
+  ## Disconnected mounts
+
+  `mount/3` runs twice: once for the HTTP render, once when the socket
+  connects. Recovery on the HTTP render starts a session process, which reads
+  the stored object and writes it back — a network round-trip in the page's
+  render path, and an object in the bucket for a visitor who never opens a
+  socket.
+
+  A view with only `:reconnect` keys skips that on its own: a rejoin is
+  detected from the connect params, which the HTTP render does not have, so
+  nothing is recoverable and the session is never started. A crawler sweeping
+  a public form leaves nothing behind.
+
+  A view with `:session` keys does pay it, because there the stored value can
+  come back and land in the first paint. If you would rather keep the object
+  store off the render path, guard the call:
+
+      def mount(_params, _session, socket) do
+        socket = assign(socket, count: 0, username: nil)
+
+        socket =
+          if connected?(socket) do
+            {_status, socket} = LiveStash.recover_state(socket)
+            socket
+          else
+            socket
+          end
+
+        {:ok, socket}
+      end
+
+  The trade-off is the first paint: it shows your defaults, and the stored
+  values arrive a moment later when the socket connects.
 
   ## Setup
 
@@ -288,7 +323,19 @@ defmodule DurableStash do
 
   ## Recover
 
+  # Nothing in scope can come back, so skip the session entirely. Starting one
+  # reads the stored object and writes it back, and a disconnected mount of a
+  # `:reconnect`-only view would pay both for a visitor who never opens a
+  # socket — a crawler on a public page would leave a stash behind per request.
   defp do_recover(socket, %Context{} = context) do
+    if recoverable_keys(context) == [] do
+      {:not_found, socket}
+    else
+      fetch_and_recover(socket, context)
+    end
+  end
+
+  defp fetch_and_recover(socket, %Context{} = context) do
     case call_session(context, &Session.fetch_view(&1, context.view)) do
       :not_found ->
         {:not_found, socket}

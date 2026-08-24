@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- Recovery no longer starts a session when nothing is in scope to recover. A
+  view whose keys are all `:reconnect` had no recoverable state on a fresh or
+  disconnected mount, but still read the stored object and wrote one back —
+  so every crawler request to a public form left a stash in the bucket, and
+  the read sat in the HTTP render path. Such a mount now returns `:not_found`
+  without touching the store.
+
 ## 0.1.1 (2026-06-22)
 
 - Writes no longer block the calling LiveView on the object-store PUT. Each
